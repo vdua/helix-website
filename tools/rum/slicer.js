@@ -52,6 +52,7 @@ dataChunks.addSeries('ttfb', (bundle) => bundle.cwvTTFB);
 dataChunks.addSeries('conversions', (bundle) => (dataChunks.hasConversion(bundle, conversionSpec)
   ? bundle.weight
   : 0));
+
 function setDomain(domain, key) {
   DOMAIN = domain;
   loader.domain = domain;
@@ -235,12 +236,15 @@ function updateFilter(params, filterText) {
     || isKnownFacet(key)
     || (key === 'filter' && filterText.length > 2);
   const transform = ([key, value]) => [key, value];
-  dataChunks.filter = parseSearchParams(params, filter, transform);
+  dataChunks.filter = parseSearchParams(params, filter, transform, {
+    checkpoint: ['viewblock'],
+    'viewblock.source': ['.form'],
+  });
 }
 
 export async function draw() {
   const params = new URL(window.location).searchParams;
-  const checkpoint = params.getAll('checkpoint');
+  const checkpoint = [...params.getAll('checkpoint'), 'viewblock'];
 
   const filterText = params.get('filter') || '';
 
@@ -306,6 +310,17 @@ export function updateState() {
     }
   });
   url.searchParams.set('domainkey', searchParams.get('domainkey') || 'incognito');
+
+  // with the conversion spec in form of dictionary
+  // need to put it back in the url by expanding the dictionary as follows
+  // the key is appended to conversion. and there can be multiple values for the same key
+  // conversion.key=value1&conversion.key=value2
+
+  Object.entries(conversionSpec).forEach(([key, values]) => {
+    values.forEach((value) => {
+      url.searchParams.append(`conversion.${key}`, value);
+    });
+  });
 
   window.history.replaceState({}, '', url);
   document.dispatchEvent(new CustomEvent('urlstatechange', { detail: url }));
@@ -384,6 +399,40 @@ const io = new IntersectionObserver((entries) => {
 
       document.addEventListener('urlstatechange', (ev) => {
         updateLabLink(ev.detail);
+      });
+
+      document.getElementById('monthly').addEventListener('click', async () => {
+        const startDate = new Date(dataChunks.data[0].date);
+
+        const dates = Array.from({ length: 12 }, (_, i) => {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() - 31 * i);
+          return date;
+        });
+
+        const newData = await Promise.all(dates.map(async (date) => {
+          const data = await loader.fetchPrevious31Days(date.toISOString().split('T')[0]);
+          dataChunks.load(data);
+          const result = {
+            pageViews: dataChunks.totals.pageViews.sum,
+            lcp: dataChunks.totals.lcp.percentile(75),
+            cls: dataChunks.totals.cls.percentile(75),
+            inp: dataChunks.totals.inp.percentile(75),
+            ttfb: dataChunks.totals.ttfb.percentile(75),
+            conversions: dataChunks.totals.conversions.sum,
+            visits: dataChunks.totals.visits.sum,
+            bounces: dataChunks.totals.bounces.sum,
+          };
+          // print the name of the month for the date
+          const month = date.toLocaleString('default', { month: 'short', year: '2-digit' });
+          return [month, ...Object.values(result)];
+        }));
+        const d = [['month', 'pageViews', 'lcp', 'cls', 'inp', 'ttfb', 'conversions', 'visits', 'bounces']]
+          .concat(newData)
+          .map((_) => _.join(',')).join('\n');
+        // copy d to clipboard
+        navigator.clipboard.writeText(d);
+        console.log('copied');
       });
     }
   }

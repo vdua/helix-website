@@ -182,7 +182,7 @@ export function getGradient(ctx, chartArea, from, to) {
  * @param {transformFn} transformFn - The transformation function.
  * @returns {Object<string, string[]>} - The dictionary of parameters.
  */
-export function parseSearchParams(params, filterFn, transformFn) {
+export function parseSearchParams(params, filterFn, transformFn, defaults = {}) {
   return Array.from(params
     .entries())
     .filter(filterFn)
@@ -191,7 +191,7 @@ export function parseSearchParams(params, filterFn, transformFn) {
       if (acc[key]) acc[key].push(value);
       else acc[key] = [value];
       return acc;
-    }, {});
+    }, defaults);
 }
 const cached = {};
 export function parseConversionSpec() {
@@ -199,7 +199,7 @@ export function parseConversionSpec() {
   const params = new URL(window.location).searchParams;
   const transform = ([key, value]) => [key.replace('conversion.', ''), value];
   const filter = ([key]) => (key.startsWith('conversion.'));
-  cached.conversionSpec = parseSearchParams(params, filter, transform);
+  cached.conversionSpec = parseSearchParams(params, filter, transform, { checkpoint: ['formsubmit'] });
   return cached.conversionSpec;
 }
 

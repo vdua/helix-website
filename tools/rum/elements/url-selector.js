@@ -40,7 +40,8 @@ export default class URLSelector extends HTMLElement {
           padding: 10px;
           cursor: pointer;
         }
-        .autocomplete-item:hover {
+        .autocomplete-item:hover,
+        .autocomplete-item.selected {
           background-color: #f0f0f0;
         }
       </style>
@@ -84,7 +85,7 @@ export default class URLSelector extends HTMLElement {
       timeoutId = setTimeout(async () => {
         const domain = input.value;
         const autoCompleteList = domains;
-        const filteredList = autoCompleteList.filter((item) => item.startsWith(domain));
+        const filteredList = autoCompleteList.filter((item) => item.indexOf(domain) > -1);
         autoCompleteContainer.innerHTML = '';
         filteredList.forEach((item) => {
           const suggestion = document.createElement('div');
@@ -95,6 +96,32 @@ export default class URLSelector extends HTMLElement {
         input.insertAdjacentElement('afterend', autoCompleteContainer);
       }, 500); // Add a delay of 500 milliseconds before making the network call
       this.dispatchEvent(new CustomEvent('change', { detail: input.value }));
+    });
+
+    input.addEventListener('keydown', (event) => {
+      const autocompleteItems = autoCompleteContainer.querySelectorAll('.autocomplete-item');
+      const currentSelectedItem = autoCompleteContainer.querySelector('.selected');
+
+      if (event.key === 'ArrowDown' && autocompleteItems.length > 0) {
+        event.preventDefault();
+        const nextSelectedItem = currentSelectedItem
+          ? currentSelectedItem.nextElementSibling : autocompleteItems[0];
+        if (nextSelectedItem) {
+          if (currentSelectedItem) currentSelectedItem.classList.remove('selected');
+          nextSelectedItem.classList.add('selected');
+          input.value = nextSelectedItem.textContent;
+        }
+      } else if (event.key === 'ArrowUp' && autocompleteItems.length > 0) {
+        event.preventDefault();
+        const prevSelectedItem = currentSelectedItem
+          ? currentSelectedItem.previousElementSibling
+          : autocompleteItems[autocompleteItems.length - 1];
+        if (prevSelectedItem) {
+          if (currentSelectedItem) currentSelectedItem.classList.remove('selected');
+          prevSelectedItem.classList.add('selected');
+          input.value = prevSelectedItem.textContent;
+        }
+      }
     });
 
     input.addEventListener('keypress', (event) => {

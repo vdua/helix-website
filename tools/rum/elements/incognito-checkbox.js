@@ -28,7 +28,7 @@ async function fetchDomainKey(domain) {
     let domainkey = '';
     try {
       const data = (await issueResp.json());
-      domainkey = data.domainkey;
+      domainkey = data.domainkey || '';
     } catch (e) {
       // no domainkey
     }
@@ -239,6 +239,9 @@ export default class IncognitoCheckbox extends HTMLElement {
       fetchDomainKey(u.searchParams.get('domain')).then((domainkey) => {
         if (domainkey === 'error') {
           this.setAttribute('mode', 'error');
+          return;
+        }
+        if (domainkey === '') {
           return;
         }
         this.domainkey = domainkey;

@@ -1,18 +1,34 @@
-function getPersistentToken() {
-  return localStorage.getItem('rum-bundler-token');
+function getPersistentToken(domain) {
+  return {
+    auth: localStorage.getItem('rum-bundler-token'),
+    endpoint: `https://rum.fastly-aem.page/domainkey/${domain}`,
+  };
+}
+
+function getFormsPersistentToken(domain) {
+  return {
+    auth: localStorage.getItem('forms-rum-bundler-token'),
+    endpoint: `https://rum-helper.varundua007.workers.dev/rum/domainkey?domain=${domain}`,
+  };
 }
 
 async function fetchDomainKey(domain) {
   try {
-    const auth = getPersistentToken();
-    const issueResp = await fetch(`https://rum.fastly-aem.page/domainkey/${domain}`, {
+    let { auth, endpoint } = getPersistentToken(domain);
+    if (!auth) {
+      const r = getFormsPersistentToken(domain);
+      auth = r.auth;
+      endpoint = r.endpoint;
+    }
+    const issueResp = await fetch(endpoint, {
       headers: {
         authorization: `Bearer ${auth}`,
       },
     });
     let domainkey = '';
     try {
-      domainkey = (await issueResp.json()).domainkey;
+      const data = (await issueResp.json());
+      domainkey = data.domainkey;
     } catch (e) {
       // no domainkey
     }
@@ -37,7 +53,7 @@ async function fetchDomainKey(domain) {
 export default class IncognitoCheckbox extends HTMLElement {
   constructor() {
     super();
-    this.template = `    
+    this.template = `
     <input type="checkbox" checked>
     <label class="eye" data-closed>
       <div class="eye__base">
@@ -61,7 +77,7 @@ export default class IncognitoCheckbox extends HTMLElement {
     this.shadowRoot.innerHTML = this.template;
 
     const style = document.createElement('style');
-    style.textContent = `    
+    style.textContent = `
 
     input {
       position: absolute;

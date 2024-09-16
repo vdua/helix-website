@@ -103,6 +103,7 @@ main .title url-selector {
   display: flex;
   align-items: center;
   width: 100%;
+  flex-wrap: wrap;
 }
 
 main .title url-selector img {

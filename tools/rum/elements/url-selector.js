@@ -1,5 +1,5 @@
 function getPersistentToken() {
-  return localStorage.getItem('rum-bundler-token');
+  return localStorage.getItem('rum-bundler-token') || localStorage.getItem('forms-rum-bundler-token');
 }
 
 export default class URLSelector extends HTMLElement {
@@ -13,7 +13,7 @@ export default class URLSelector extends HTMLElement {
         }
 
         input {
-          width: 100%;
+          width: 80%;
           display: block;
           font: inherit;
           font-size: var(--type-heading-xl-size);
@@ -26,18 +26,46 @@ export default class URLSelector extends HTMLElement {
           background-color: transparent;
           color: black;
         }
+        .autocomplete-container {
+          display: flex;
+          flex-direction: column;
+          background-color: #fff;
+          max-height: 200px;
+          overflow-y: auto;
+          width: 100%;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          z-index: 1000;
+        }
+        .autocomplete-item {
+          padding: 10px;
+          cursor: pointer;
+        }
+        .autocomplete-item:hover {
+          background-color: #f0f0f0;
+        }
       </style>
       <label for="url"><img src="https://www.aem.live/favicon.ico"></label>
       <input id="url" type="url">
+      <div class="autocomplete-container"></div>
     `;
   }
 
-  connectedCallback() {
+  async connectedCallback() {
     this.innerHTML = this.template;
     const input = this.querySelector('input');
     input.value = new URL(window.location.href).searchParams.get('domain');
     const img = this.querySelector('img');
     img.src = `https://www.google.com/s2/favicons?domain=${input.value}&sz=64`;
+
+    const autoCompleteContainer = this.querySelector('.autocomplete-container');
+    autoCompleteContainer.addEventListener('click', (event) => {
+      const { target } = event;
+      if (target.classList.contains('autocomplete-item')) {
+        input.value = target.textContent;
+        autoCompleteContainer.innerHTML = '';
+        this.dispatchEvent(new CustomEvent('submit', { detail: input.value }));
+      }
+    });
 
     if (!getPersistentToken()) {
       input.disabled = true;
@@ -47,7 +75,25 @@ export default class URLSelector extends HTMLElement {
       input.select();
     });
 
-    input.addEventListener('input', () => {
+    let timeoutId;
+    const response = await fetch('https://rum-helper.varundua007.workers.dev/domains?limit=500&text=');
+    const domainData = (await response.json());
+    const domains = domainData.data.map((_) => _.name);
+    input.addEventListener('input', async () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        const domain = input.value;
+        const autoCompleteList = domains;
+        const filteredList = autoCompleteList.filter((item) => item.startsWith(domain));
+        autoCompleteContainer.innerHTML = '';
+        filteredList.forEach((item) => {
+          const suggestion = document.createElement('div');
+          suggestion.classList.add('autocomplete-item');
+          suggestion.textContent = item;
+          autoCompleteContainer.appendChild(suggestion);
+        });
+        input.insertAdjacentElement('afterend', autoCompleteContainer);
+      }, 500); // Add a delay of 500 milliseconds before making the network call
       this.dispatchEvent(new CustomEvent('change', { detail: input.value }));
     });
 
@@ -69,9 +115,12 @@ export default class URLSelector extends HTMLElement {
       } catch (e) {
         // ignore, some domains are not valid URLs
       }
-      const goto = new URL(window.location.pathname, window.location.origin);
+      const goto = new URL(window.location.href);
+      // const { searchParams } = new URL(window.location.href);
+      // const goto = new URL(window.location.pathname, window.location.origin);
       goto.searchParams.set('domain', domain);
       goto.searchParams.set('view', 'month');
+      goto.searchParams.delete('domainkey');
       window.location.href = goto.href;
     });
   }

@@ -199,7 +199,7 @@ export function parseConversionSpec() {
   const params = new URL(window.location).searchParams;
   const transform = ([key, value]) => [key.replace('conversion.', ''), value];
   const filter = ([key]) => (key.startsWith('conversion.'));
-  cached.conversionSpec = parseSearchParams(params, filter, transform, { checkpoint: ['formsubmit'] });
+  cached.conversionSpec = parseSearchParams(params, filter, transform);
   return cached.conversionSpec;
 }
 

@@ -236,15 +236,12 @@ function updateFilter(params, filterText) {
     || isKnownFacet(key)
     || (key === 'filter' && filterText.length > 2);
   const transform = ([key, value]) => [key, value];
-  dataChunks.filter = parseSearchParams(params, filter, transform, {
-    checkpoint: ['viewblock'],
-    'viewblock.source': ['.form'],
-  });
+  dataChunks.filter = parseSearchParams(params, filter, transform);
 }
 
 export async function draw() {
   const params = new URL(window.location).searchParams;
-  const checkpoint = [...params.getAll('checkpoint'), 'viewblock'];
+  const checkpoint = params.getAll('checkpoint');
 
   const filterText = params.get('filter') || '';
 
@@ -305,7 +302,7 @@ export function updateState() {
   if (searchParams.get('metrics')) url.searchParams.set('metrics', searchParams.get('metrics'));
 
   elems.sidebar.querySelectorAll('input').forEach((e) => {
-    if (e.checked) {
+    if (e.checked && e.dataset.hidden !== 'true') {
       url.searchParams.append(e.id.split('=')[0], e.value);
     }
   });
@@ -432,7 +429,6 @@ const io = new IntersectionObserver((entries) => {
           .map((_) => _.join(',')).join('\n');
         // copy d to clipboard
         navigator.clipboard.writeText(d);
-        console.log('copied');
       });
     }
   }

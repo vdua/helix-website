@@ -98,6 +98,31 @@ export default class ListFacet extends HTMLElement {
     if (this.dataChunks) this.update();
   }
 
+  addAllSelection(facetName) {
+    const div = document.createElement('div');
+    const input = document.createElement('input');
+    input.id = `${facetName}-select-all`;
+    input.type = 'checkbox';
+    input.value = 'select-all';
+    input.dataset.hidden = true;
+    if (this.hasAttribute('all-selected')) {
+      input.checked = true;
+    }
+    const label = document.createElement('label');
+    label.setAttribute('for', `${facetName}-select-all`);
+    label.innerHTML = 'Select All';
+    div.append(input, label);
+    input.addEventListener('change', () => {
+      const checkboxes = Array.from(this.querySelectorAll('input[type="checkbox"]'));
+      checkboxes.forEach((checkbox) => {
+        checkbox.checked = input.checked;
+      });
+      this.toggleAttribute('all-selected', input.checked);
+      this.parentElement.parentElement.dispatchEvent(new Event('facetchange'), this);
+    });
+    return div;
+  }
+
   update() {
     const facetName = this.getAttribute('facet');
     const facetEntries = this.dataChunks.facets[facetName];
@@ -105,15 +130,34 @@ export default class ListFacet extends HTMLElement {
 
     const sort = this.getAttribute('sort') || 'count';
 
-    const optionKeys = facetEntries.map((f) => f.value)
-      .sort((a, b) => {
-        if (sort === 'count') return 0; // keep the order
-        return a.localeCompare(b);
-      });
-
     const url = new URL(window.location);
+
+    const sortFn = (a, b) => {
+      const aValuePresent = url.searchParams.has(facetName, a);
+      const bValuePresent = url.searchParams.has(facetName, b);
+
+      if (aValuePresent && !bValuePresent) {
+        return -1;
+      } if (!aValuePresent && bValuePresent) {
+        return 1;
+      }
+      if (sort === 'count') {
+        return 0; // keep the order
+      }
+      return a.localeCompare(b);
+    };
+
+    const optionKeys = facetEntries.map((f) => f.value);
+    if (!this.hasAttribute('all-selected')) {
+      const selectedEntries = optionKeys.filter((entry) => url.searchParams.has(facetName, entry));
+      this.toggleAttribute('all-selected', selectedEntries.length === optionKeys.length);
+    } else {
+      this.setAttribute('mode', 'all');
+    }
+    const sortedFacets = facetEntries.sort((a, b) => sortFn(a.value, b.value));
+
     const mode = url.searchParams.get('mode') || this.getAttribute('mode');
-    const numOptions = mode === 'all' ? 20 : 10;
+    const numOptions = mode === 'all' ? optionKeys.length : 10;
 
     if (this.querySelector('dl')) {
       this.placeholders = Array.from(this.querySelectorAll('dl > dt + dd'))
@@ -146,8 +190,10 @@ export default class ListFacet extends HTMLElement {
         ? optionKeys.filter((a) => !!(this.placeholders[a]))
         : optionKeys;
 
+      // fieldSet.append(this.addAllSelection(facetName));
+
       const paint = (start = 0, end = numOptions) => {
-        const entries = facetEntries
+        const entries = sortedFacets
           .filter((entry) => !filterKeys || filteredKeys.includes(entry.value));
         entries.slice(start, end).forEach((entry) => {
           const div = document.createElement('div');
@@ -235,7 +281,7 @@ export default class ListFacet extends HTMLElement {
         all.textContent = `all (${filteredKeys.length})`;
         all.addEventListener('click', (evt) => {
           evt.preventDefault();
-
+          this.setAttribute('mode', 'all');
           const start = fieldSet.children.length - 2; // minus the "legend" and "more" container
           paint(start, filteredKeys.length);
 

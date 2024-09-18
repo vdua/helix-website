@@ -157,7 +157,7 @@ export default class ListFacet extends HTMLElement {
     const sortedFacets = facetEntries.sort((a, b) => sortFn(a.value, b.value));
 
     const mode = url.searchParams.get('mode') || this.getAttribute('mode');
-    const numOptions = mode === 'all' ? optionKeys.length : 10;
+    const numOptions = mode === 'all' ? optionKeys.length : Math.min(50, optionKeys.length);
 
     if (this.querySelector('dl')) {
       this.placeholders = Array.from(this.querySelectorAll('dl > dt + dd'))

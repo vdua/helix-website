@@ -51,21 +51,25 @@ export default class ListFacet extends HTMLElement {
     return this.parentElement.parentElement.dataChunks;
   }
 
-  computeTSV() {
+  computeTSV(onlySelected) {
     const url = new URL(window.location);
     const facetName = this.getAttribute('facet');
     const mode = url.searchParams.get('mode') || this.getAttribute('mode');
 
     const facetEntries = this.dataChunks.facets[facetName];
     const tsv = [];
-    const optionKeys = facetEntries.map((f) => f.value);
+    const selectedEntries = facetEntries.filter(
+      (entry) => url.searchParams.has(facetName, entry.value),
+    );
+    const entries = onlySelected === true ? selectedEntries : facetEntries;
+    const optionKeys = entries.map((f) => f.value);
     if (optionKeys.length) {
       tsv.push(`${facetName}\tcount\tlcp\tcls\tinp`);
       const filterKeys = facetName === 'checkpoint' && mode !== 'all';
       const filteredKeys = filterKeys
         ? optionKeys.filter((a) => !!(this.placeholders[a]))
         : optionKeys;
-      facetEntries
+      entries
         .filter((entry) => !filterKeys || filteredKeys.includes(entry.value))
         .forEach((entry) => {
           const CWVDISPLAYTHRESHOLD = 10;
@@ -184,6 +188,12 @@ export default class ListFacet extends HTMLElement {
 
       legend.append(clipboard);
 
+      const clipboard2 = document.createElement('span');
+      clipboard2.className = 'clipboard clipboard-selected';
+      clipboard2.title = 'Copy selected facet rows to clipboard';
+
+      legend.append(clipboard2);
+
       fieldSet.append(legend);
       const filterKeys = facetName === 'checkpoint' && mode !== 'all';
       const filteredKeys = filterKeys && this.placeholders
@@ -300,6 +310,15 @@ export default class ListFacet extends HTMLElement {
         toast.ariaHidden = false;
         setTimeout(() => { toast.ariaHidden = true; }, 3000);
       });
+
+      clipboard2.addEventListener('click', () => {
+        const tsv = this.computeTSV(true);
+        navigator.clipboard.writeText(tsv.join('\r\n'));
+        const toast = document.getElementById('copied-toast');
+        toast.ariaHidden = false;
+        setTimeout(() => { toast.ariaHidden = true; }, 3000);
+      });
+
       this.append(fieldSet);
     } else {
       const fieldSet = this.querySelector('fieldset');

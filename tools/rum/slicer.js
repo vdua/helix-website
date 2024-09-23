@@ -22,7 +22,7 @@ const API_ENDPOINT = BUNDLER_ENDPOINT;
 const elems = {};
 
 const dataChunks = new DataChunks();
-
+window.dataChunks = dataChunks;
 const loader = new DataLoader();
 loader.apiEndpoint = API_ENDPOINT;
 
@@ -302,7 +302,7 @@ export function updateState() {
   if (searchParams.get('metrics')) url.searchParams.set('metrics', searchParams.get('metrics'));
 
   elems.sidebar.querySelectorAll('input').forEach((e) => {
-    if (e.checked && e.dataset.hidden !== 'true') {
+    if (e.checked) {
       url.searchParams.append(e.id.split('=')[0], e.value);
     }
   });
@@ -370,7 +370,7 @@ const io = new IntersectionObserver((entries) => {
       loadData(view);
     }
 
-    elems.filterInput.addEventListener('input', () => {
+    elems.filterInput.addEventListener('change', () => {
       updateState();
       draw();
     });

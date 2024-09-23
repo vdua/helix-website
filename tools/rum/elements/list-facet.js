@@ -102,31 +102,6 @@ export default class ListFacet extends HTMLElement {
     if (this.dataChunks) this.update();
   }
 
-  addAllSelection(facetName) {
-    const div = document.createElement('div');
-    const input = document.createElement('input');
-    input.id = `${facetName}-select-all`;
-    input.type = 'checkbox';
-    input.value = 'select-all';
-    input.dataset.hidden = true;
-    if (this.hasAttribute('all-selected')) {
-      input.checked = true;
-    }
-    const label = document.createElement('label');
-    label.setAttribute('for', `${facetName}-select-all`);
-    label.innerHTML = 'Select All';
-    div.append(input, label);
-    input.addEventListener('change', () => {
-      const checkboxes = Array.from(this.querySelectorAll('input[type="checkbox"]'));
-      checkboxes.forEach((checkbox) => {
-        checkbox.checked = input.checked;
-      });
-      this.toggleAttribute('all-selected', input.checked);
-      this.parentElement.parentElement.dispatchEvent(new Event('facetchange'), this);
-    });
-    return div;
-  }
-
   update() {
     const facetName = this.getAttribute('facet');
     const facetEntries = this.dataChunks.facets[facetName];
@@ -152,12 +127,7 @@ export default class ListFacet extends HTMLElement {
     };
 
     const optionKeys = facetEntries.map((f) => f.value);
-    if (!this.hasAttribute('all-selected')) {
-      const selectedEntries = optionKeys.filter((entry) => url.searchParams.has(facetName, entry));
-      this.toggleAttribute('all-selected', selectedEntries.length === optionKeys.length);
-    } else {
-      this.setAttribute('mode', 'all');
-    }
+
     const sortedFacets = facetEntries.sort((a, b) => sortFn(a.value, b.value));
 
     const mode = url.searchParams.get('mode') || this.getAttribute('mode');
@@ -199,8 +169,6 @@ export default class ListFacet extends HTMLElement {
       const filteredKeys = filterKeys && this.placeholders
         ? optionKeys.filter((a) => !!(this.placeholders[a]))
         : optionKeys;
-
-      // fieldSet.append(this.addAllSelection(facetName));
 
       const paint = (start = 0, end = numOptions) => {
         const entries = sortedFacets

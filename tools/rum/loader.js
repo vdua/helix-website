@@ -29,7 +29,7 @@ function openDatabase() {
 async function storeData(url, data) {
   try {
     const db = await openDatabase();
-    return Promise((resolve) => {
+    return new Promise((resolve) => {
       const transaction = db.transaction(['dataStore'], 'readwrite');
       const objectStore = transaction.objectStore('dataStore');
 

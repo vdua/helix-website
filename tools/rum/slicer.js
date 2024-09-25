@@ -13,11 +13,9 @@ import {
 /* globals */
 let DOMAIN = 'www.thinktanked.org';
 
-const BUNDLER_ENDPOINT = 'https://rum.fastly-aem.page/bundles';
+const BUNDLER_ENDPOINT = 'https://rum.fastly-aem.page';
 // const BUNDLER_ENDPOINT = 'http://localhost:3000';
 const API_ENDPOINT = BUNDLER_ENDPOINT;
-// const API_ENDPOINT = 'https://rum-bundles-2.david8603.workers.dev/rum-bundles';
-// const UA_KEY = 'user_agent';
 
 const elems = {};
 
@@ -36,7 +34,7 @@ const isDefaultConversion = Object.keys(conversionSpec).length === 1
   && conversionSpec.checkpoint
   && conversionSpec.checkpoint[0] === 'click';
 
-window.addEventListener('pageshow', () => elems.canvas && herochart.render());
+window.addEventListener('pageshow', () => !elems.canvas && herochart.render());
 
 // set up metrics for dataChunks
 dataChunks.addSeries('pageViews', (bundle) => bundle.weight);
@@ -275,21 +273,21 @@ export async function draw() {
   console.log(`full ui updated in ${new Date() - startTime}ms`);
 }
 
-async function loadData(scope) {
+async function loadData(config) {
+  const scope = config.value;
   const params = new URL(window.location.href).searchParams;
-  const endDate = params.get('endDate') ? `${params.get('endDate')}T00:00:00` : null;
+  const startDate = params.get('startDate') ? `${params.get('startDate')}` : null;
+  const endDate = params.get('endDate') ? `${params.get('endDate')}` : null;
 
-  if (scope === 'week') {
+  if (startDate && endDate) {
+    dataChunks.load(await loader.fetchPeriod(startDate, endDate));
+  } else if (scope === 'week') {
     dataChunks.load(await loader.fetchLastWeek(endDate));
-  }
-  if (scope === 'month') {
+  } else if (scope === 'month') {
     dataChunks.load(await loader.fetchPrevious31Days(endDate));
-  }
-  if (scope === 'year') {
+  } else if (scope === 'year') {
     dataChunks.load(await loader.fetchPrevious12Months(endDate));
   }
-
-  draw();
 }
 
 export function updateState() {
@@ -297,8 +295,14 @@ export function updateState() {
   const { searchParams } = new URL(window.location.href);
   url.searchParams.set('domain', DOMAIN);
   url.searchParams.set('filter', elems.filterInput.value);
-  url.searchParams.set('view', elems.viewSelect.value);
-  if (searchParams.get('endDate')) url.searchParams.set('endDate', searchParams.get('endDate'));
+
+  const viewConfig = elems.viewSelect.value;
+  url.searchParams.set('view', viewConfig.value);
+  if (viewConfig.value === 'custom') {
+    url.searchParams.set('startDate', viewConfig.from);
+    url.searchParams.set('endDate', viewConfig.to);
+  }
+  // if (searchParams.get('endDate')) url.searchParams.set('endDate', searchParams.get('endDate'));
   if (searchParams.get('metrics')) url.searchParams.set('metrics', searchParams.get('metrics'));
 
   elems.sidebar.querySelectorAll('input').forEach((e) => {
@@ -348,26 +352,41 @@ const io = new IntersectionObserver((entries) => {
     elems.filterInput = sidebar.elems.filterInput;
 
     const params = new URL(window.location).searchParams;
-    const view = params.get('view') || 'week';
+    let view = params.get('view');
+    if (!view) {
+      view = 'week';
+      params.set('view', view);
+      const url = new URL(window.location.href);
+      url.search = params.toString();
+      window.history.replaceState({}, '', url);
+    }
+
+    const startDate = params.get('startDate') ? `${params.get('startDate')}` : null;
+    const endDate = params.get('endDate') ? `${params.get('endDate')}` : null;
 
     elems.incognito.addEventListener('change', async () => {
       loader.domainKey = elems.incognito.getAttribute('domainkey');
-      await loadData(view);
-      herochart.draw();
+
+      await loadData(elems.viewSelect.value);
+      draw();
     });
 
     herochart.render();
-    // sidebar.updateFacets();
 
     elems.filterInput.value = params.get('filter');
-    elems.viewSelect.value = view;
+    elems.viewSelect.value = {
+      value: view,
+      from: startDate,
+      to: endDate,
+    };
+
     setDomain(params.get('domain') || 'www.thinktanked.org', params.get('domainkey') || '');
 
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     elems.timezoneElement.textContent = timezone;
 
     if (elems.incognito.getAttribute('domainkey')) {
-      loadData(view);
+      loadData(elems.viewSelect.value).then(draw);
     }
 
     elems.filterInput.addEventListener('change', () => {
@@ -375,7 +394,7 @@ const io = new IntersectionObserver((entries) => {
       draw();
     });
 
-    elems.viewSelect.addEventListener('input', () => {
+    elems.viewSelect.addEventListener('change', () => {
       updateState();
       window.location.reload();
     });
@@ -398,41 +417,42 @@ const io = new IntersectionObserver((entries) => {
         updateLabLink(ev.detail);
       });
 
-      document.getElementById('monthly').addEventListener('click', async () => {
-        const startDate = new Date(dataChunks.data[0].date);
+      // document.getElementById('monthly').addEventListener('click', async () => {
+      //   const startDate = new Date(dataChunks.data[0].date);
 
-        const dates = Array.from({ length: 12 }, (_, i) => {
-          const date = new Date(startDate);
-          date.setDate(startDate.getDate() - 31 * i);
-          return date;
-        });
+      //   const dates = Array.from({ length: 12 }, (_, i) => {
+      //     const date = new Date(startDate);
+      //     date.setDate(startDate.getDate() - 31 * i);
+      //     return date;
+      //   });
 
-        const newData = await Promise.all(dates.map(async (date) => {
-          const data = await loader.fetchPrevious31Days(date.toISOString().split('T')[0]);
-          dataChunks.load(data);
-          const result = {
-            pageViews: dataChunks.totals.pageViews.sum,
-            lcp: dataChunks.totals.lcp.percentile(75),
-            cls: dataChunks.totals.cls.percentile(75),
-            inp: dataChunks.totals.inp.percentile(75),
-            ttfb: dataChunks.totals.ttfb.percentile(75),
-            conversions: dataChunks.totals.conversions.sum,
-            visits: dataChunks.totals.visits.sum,
-            bounces: dataChunks.totals.bounces.sum,
-          };
-          // print the name of the month for the date
-          const month = date.toLocaleString('default', { month: 'short', year: '2-digit' });
-          return [month, ...Object.values(result)];
-        }));
-        const d = [['month', 'pageViews', 'lcp', 'cls', 'inp', 'ttfb', 'conversions', 'visits', 'bounces']]
-          .concat(newData)
-          .map((_) => _.join(',')).join('\n');
-        // copy d to clipboard
-        navigator.clipboard.writeText(d);
-        const toast = document.getElementById('copied-toast');
-        toast.ariaHidden = false;
-        setTimeout(() => { toast.ariaHidden = true; }, 3000);
-      });
+      //   const newData = await Promise.all(dates.map(async (date) => {
+      //     const data = await loader.fetchPrevious31Days(date.toISOString().split('T')[0]);
+      //     dataChunks.load(data);
+      //     const result = {
+      //       pageViews: dataChunks.totals.pageViews.sum,
+      //       lcp: dataChunks.totals.lcp.percentile(75),
+      //       cls: dataChunks.totals.cls.percentile(75),
+      //       inp: dataChunks.totals.inp.percentile(75),
+      //       ttfb: dataChunks.totals.ttfb.percentile(75),
+      //       conversions: dataChunks.totals.conversions.sum,
+      //       visits: dataChunks.totals.visits.sum,
+      //       bounces: dataChunks.totals.bounces.sum,
+      //     };
+      //     // print the name of the month for the date
+      //     const month = date.toLocaleString('default', { month: 'short', year: '2-digit' });
+      //     return [month, ...Object.values(result)];
+      //   }));
+      //   const d = [['month', 'pageViews', 'lcp', 'cls', 'inp',
+      // 'ttfb', 'conversions', 'visits', 'bounces']]
+      //     .concat(newData)
+      //     .map((_) => _.join(',')).join('\n');
+      //   // copy d to clipboard
+      //   navigator.clipboard.writeText(d);
+      //   const toast = document.getElementById('copied-toast');
+      //   toast.ariaHidden = false;
+      //   setTimeout(() => { toast.ariaHidden = true; }, 3000);
+      // });
     }
   }
 });

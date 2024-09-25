@@ -2,17 +2,21 @@ function getPersistentToken() {
   return localStorage.getItem('rum-bundler-token') || localStorage.getItem('forms-rum-bundler-token');
 }
 
+// function isIncognitoMode() {
+//   return new URL(window.location.href).searchParams.get('domainkey') === 'incognito';
+// }
+
 export default class URLSelector extends HTMLElement {
   constructor() {
     super();
     this.template = `
       <style>
-        label {
+        url-selector label {
           display: block;
           margin-right: 8px;
         }
 
-        input {
+        url-selector input {
           width: 80%;
           display: block;
           font: inherit;
@@ -22,7 +26,7 @@ export default class URLSelector extends HTMLElement {
           border: 0;
         }
 
-        input:disabled {
+        url-selector input:disabled {
           background-color: transparent;
           color: black;
         }
@@ -56,7 +60,7 @@ export default class URLSelector extends HTMLElement {
     const input = this.querySelector('input');
     input.value = new URL(window.location.href).searchParams.get('domain');
     const img = this.querySelector('img');
-    img.src = `https://www.google.com/s2/favicons?domain=${input.value}&sz=64`;
+    img.src = `https://www.google.com/s2/favicons?domain=${input.value.split(':')[0]}&sz=64`;
 
     const autoCompleteContainer = this.querySelector('.autocomplete-container');
     autoCompleteContainer.addEventListener('click', (event) => {

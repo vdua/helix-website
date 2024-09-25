@@ -1,7 +1,13 @@
 function getPersistentToken(domain) {
+  let org;
+  if (domain.endsWith(':all') && domain !== 'aem.live:all') {
+    ([org] = domain.split(':'));
+  }
+
   return {
     auth: localStorage.getItem('rum-bundler-token'),
-    endpoint: `https://rum.fastly-aem.page/domainkey/${domain}`,
+    endpoint: `https://rum.fastly-aem.page/${org ? `orgs/${org}/key` : `domainkey/${domain}`}`,
+    org,
   };
 }
 
@@ -9,16 +15,18 @@ function getFormsPersistentToken(domain) {
   return {
     auth: localStorage.getItem('forms-rum-bundler-token'),
     endpoint: `https://rum-helper.varundua007.workers.dev/rum/domainkey?domain=${domain}`,
+    org: false,
   };
 }
 
 async function fetchDomainKey(domain) {
   try {
-    let { auth, endpoint } = getPersistentToken(domain);
+    let { auth, endpoint, org } = getPersistentToken(domain);
     if (!auth) {
       const r = getFormsPersistentToken(domain);
       auth = r.auth;
       endpoint = r.endpoint;
+      org = false;
     }
     const issueResp = await fetch(endpoint, {
       headers: {
@@ -27,8 +35,7 @@ async function fetchDomainKey(domain) {
     });
     let domainkey = '';
     try {
-      const data = (await issueResp.json());
-      domainkey = data.domainkey || '';
+      domainkey = (await issueResp.json())[org ? 'orgkey' : 'domainkey'] || '';
     } catch (e) {
       // no domainkey
     }

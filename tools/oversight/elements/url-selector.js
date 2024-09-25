@@ -2,6 +2,10 @@ function getPersistentToken() {
   return localStorage.getItem('rum-bundler-token');
 }
 
+function isIncognitoMode() {
+  return new URL(window.location.href).searchParams.get('domainkey') === 'incognito';
+}
+
 export default class URLSelector extends HTMLElement {
   constructor() {
     super();
@@ -28,20 +32,58 @@ export default class URLSelector extends HTMLElement {
         }
       </style>
       <label for="url"><img src="https://www.aem.live/favicon.ico"></label>
-      <input id="url" type="url">
+      <input id="url" type="url" list="rum-domain-suggestions">
+      <datalist id="rum-domain-suggestions"></datalist>
     `;
   }
 
   connectedCallback() {
     this.innerHTML = this.template;
+    const datalist = this.querySelector('datalist');
     const input = this.querySelector('input');
     input.value = new URL(window.location.href).searchParams.get('domain');
     const img = this.querySelector('img');
-    img.src = `https://www.google.com/s2/favicons?domain=${input.value}&sz=64`;
+    img.src = `https://www.google.com/s2/favicons?domain=${input.value.split(':')[0]}&sz=64`;
 
     if (!getPersistentToken()) {
       input.disabled = true;
+      datalist.remove();
+
+      // detect a click with shift key pressed
+      img.addEventListener('click', (event) => {
+        if (event.shiftKey) {
+          const targetlocation = new URL('https://www.aem.live/tools/oversight/explorer.html');
+          targetlocation.searchParams.set('domain', input.value);
+          targetlocation.searchParams.set('returnTo', window.location.href);
+          window.location.href = targetlocation.href;
+        }
+      });
     }
+
+    input.addEventListener('mouseover', () => {
+      const token = getPersistentToken();
+      if (token && !isIncognitoMode()) {
+        fetch('https://rum.fastly-aem.page/domains?suggested=true', {
+          headers: {
+            accept: 'application/json',
+            authorization: `Bearer ${token}`,
+          },
+        }).then(async (resp) => {
+          if (!resp.ok) {
+            datalist.remove();
+          } else {
+            const { domains } = await resp.json();
+            domains.forEach((domain) => {
+              const option = document.createElement('option');
+              option.value = domain;
+              datalist.appendChild(option);
+            });
+          }
+        }).catch(() => {
+          datalist.remove();
+        });
+      }
+    }, { once: true });
 
     input.addEventListener('focus', () => {
       input.select();

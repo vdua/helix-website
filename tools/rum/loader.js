@@ -5,6 +5,93 @@
  */
 import { addCalculatedProps } from './cruncher.js';
 
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('DataStoreDB', 1);
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('dataStore')) {
+        db.createObjectStore('dataStore', { keyPath: 'url' });
+      }
+    };
+
+    request.onsuccess = (event) => {
+      resolve(event.target.result);
+    };
+
+    request.onerror = (event) => {
+      reject(event.target.error);
+    };
+  });
+}
+
+async function storeData(url, data) {
+  try {
+    const db = await openDatabase();
+    return Promise((resolve) => {
+      const transaction = db.transaction(['dataStore'], 'readwrite');
+      const objectStore = transaction.objectStore('dataStore');
+
+      const request = objectStore.put({ url, data });
+
+      request.onsuccess = () => {
+        console.log(`db:write Data stored successfully at ${url}`);
+        resolve(true);
+      };
+
+      request.onerror = (event) => {
+        console.error('Error storing data:', event.target.error);
+        resolve(false);
+      };
+    });
+  } catch (error) {
+    console.error('Error opening database:', error);
+    return Promise.resolve(false);
+  }
+}
+
+async function fetchData(url) {
+  try {
+    const db = await openDatabase();
+    return new Promise((resolve) => {
+      const transaction = db.transaction(['dataStore'], 'readonly');
+      const objectStore = transaction.objectStore('dataStore');
+
+      const request = objectStore.get(url);
+
+      request.onsuccess = (event) => {
+        if (event.target.result) {
+          console.log(`db:read Data fetched successfully for ${url}:`, event.target.result.data);
+          resolve(event.target.result.data);
+        } else {
+          console.log('db:read No data found for URL:', url);
+          resolve(null);
+        }
+      };
+
+      request.onerror = (event) => {
+        console.error('Error fetching data:', event.target.error);
+        resolve(null);
+      };
+    });
+  } catch (error) {
+    console.error('Error opening database:', error);
+    return Promise.resolve(null);
+  }
+}
+
+async function getData(apiRequestURL) {
+  const data = await fetchData(apiRequestURL);
+  if (data) {
+    return data;
+  }
+  const resp = await fetch(apiRequestURL);
+  const json = await resp.json();
+  await storeData(apiRequestURL, json);
+  return json;
+}
+
 export default class DataLoader {
   constructor() {
     this.cache = new Map();
@@ -52,8 +139,7 @@ export default class DataLoader {
     dateSplits.pop();
     const monthPath = dateSplits.join('/');
     const apiRequestURL = this.apiURL(monthPath);
-    const resp = await fetch(apiRequestURL);
-    const json = await resp.json();
+    const json = await getData(apiRequestURL);
     const { rumBundles } = json;
     rumBundles.forEach((bundle) => addCalculatedProps(bundle));
     return { date, rumBundles };
@@ -63,8 +149,7 @@ export default class DataLoader {
     const [date] = utcISOString.split('T');
     const datePath = date.split('-').join('/');
     const apiRequestURL = this.apiURL(datePath);
-    const resp = await fetch(apiRequestURL);
-    const json = await resp.json();
+    const json = await getData(apiRequestURL);
     const { rumBundles } = json;
     rumBundles.forEach((bundle) => addCalculatedProps(bundle));
     return { date, rumBundles };
@@ -75,8 +160,7 @@ export default class DataLoader {
     const datePath = date.split('-').join('/');
     const hour = time.split(':')[0];
     const apiRequestURL = this.apiURL(datePath, hour);
-    const resp = await fetch(apiRequestURL);
-    const json = await resp.json();
+    const json = await getData(apiRequestURL);
     const { rumBundles } = json;
     rumBundles.forEach((bundle) => addCalculatedProps(bundle));
     return { date, hour, rumBundles };

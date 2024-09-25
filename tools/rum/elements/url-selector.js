@@ -147,6 +147,7 @@ export default class URLSelector extends HTMLElement {
       // const goto = new URL(window.location.pathname, window.location.origin);
       goto.searchParams.set('domain', domain);
       goto.searchParams.set('view', 'month');
+      goto.searchParams.delete('url');
       goto.searchParams.delete('domainkey');
       window.location.href = goto.href;
     });

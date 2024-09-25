@@ -429,6 +429,9 @@ const io = new IntersectionObserver((entries) => {
           .map((_) => _.join(',')).join('\n');
         // copy d to clipboard
         navigator.clipboard.writeText(d);
+        const toast = document.getElementById('copied-toast');
+        toast.ariaHidden = false;
+        setTimeout(() => { toast.ariaHidden = true; }, 3000);
       });
     }
   }

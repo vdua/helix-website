@@ -166,8 +166,8 @@ export default class DataLoader {
     return { date, hour, rumBundles };
   }
 
-  async fetchLastWeek() {
-    const date = new Date();
+  async fetchLastWeek(endDate) {
+    const date = endDate ? new Date(endDate) : new Date();
     const hoursInWeek = 7 * 24;
     const promises = [];
     for (let i = 0; i < hoursInWeek; i += 1) {

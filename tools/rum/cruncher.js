@@ -661,7 +661,12 @@ export class DataChunks {
     return bundles.filter((bundle) => filterBy.every(([attributeName, desiredValues]) => {
       const actualValues = valuesExtractorFn(attributeName, bundle, this);
       const combiner = combinerExtractorFn(attributeName, this);
-      return desiredValues[combiner]((value) => actualValues.includes(value));
+      return desiredValues[combiner]((value) => {
+        if (value instanceof RegExp) {
+          return actualValues.some((actualValue) => value.test(actualValue));
+        }
+        return actualValues.includes(value);
+      });
     }));
   }
 

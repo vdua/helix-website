@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-relative-packages
 import {
-  DataChunks, utils, series, facets,
+  DataChunks, utils, series, facets, facetFns,
 // eslint-disable-next-line import/no-unresolved
 } from '@adobe/rum-distiller';
 import DataLoader from './loader.js';
@@ -23,6 +23,10 @@ const {
 } = facets;
 
 const {
+  checkpointSource,
+} = facetFns;
+
+const {
   pageViews, visits, bounces, lcp, cls, inp, engagement, ttfb, organic,
 } = series;
 
@@ -37,6 +41,61 @@ const elems = {};
 
 const dataChunks = new DataChunks();
 window.dataChunks = dataChunks;
+
+function groupBy(array, keyFn) {
+  return array.reduce((result, item) => {
+    const key = keyFn(item);
+    if (Array.isArray(key)) {
+      key.forEach((k) => {
+        if (!result[k]) {
+          result[k] = [];
+        }
+        result[k].push(item);
+      });
+    } else {
+      if (!result[key]) {
+        result[key] = [];
+      }
+      result[key].push(item);
+    }
+    return result;
+  }, {});
+}
+
+function getClickData(data) {
+  const clickSource = data.facets['click.source'];
+  const result = clickSource.map((element) => {
+    const groupedByUserAgent = groupBy(element.entries, (bundle) => {
+      const ua = data.facetFns.userAgent(bundle);
+      return ua;
+    });
+    const sourceData = Object.entries(groupedByUserAgent).reduce((acc, [ua, entries]) => ({
+      ...acc,
+      [ua]: {
+        count: entries.length,
+        weight: entries.reduce((accWeight, bundle) => accWeight + bundle.weight, 0),
+      },
+    }), { selector: element.value });
+    return sourceData;
+  });
+
+  const totals = data.facets.userAgent.reduce((acc, element) => ({
+    ...acc,
+    [element.value]: {
+      count: element.count,
+      weight: element.weight,
+    },
+  }), { selector: 'total' });
+
+  result.unshift(totals);
+  return result;
+}
+
+window.clickmap = function cm() {
+  dataChunks.addFacet('click.source', checkpointSource('click'));
+  dataChunks.filter = dataChunks.filters;
+  return getClickData(dataChunks);
+};
 
 window.initializeDataChunks = function initializeDataChunks(data) {
   const chunks = new DataChunks();

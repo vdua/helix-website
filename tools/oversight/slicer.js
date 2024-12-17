@@ -36,6 +36,107 @@ const API_ENDPOINT = BUNDLER_ENDPOINT;
 const elems = {};
 
 const dataChunks = new DataChunks();
+window.dataChunks = dataChunks;
+
+window.initializeDataChunks = function initializeDataChunks(data) {
+  const chunks = new DataChunks();
+  chunks.load(data);
+  chunks.addSeries('pageViews', pageViews);
+  chunks.addSeries('visits', visits);
+  // a bounce is a visit without a click
+  chunks.addSeries('bounces', bounces);
+  chunks.addSeries('lcp', lcp);
+  chunks.addSeries('cls', cls);
+  chunks.addSeries('inp', inp);
+  chunks.addSeries('ttfb', ttfb);
+  chunks.addSeries('engagement', engagement);
+  chunks.addSeries('conversions', (bundle) => (chunks.hasConversion(bundle, parseConversionSpec())
+    ? bundle.weight
+    : 0));
+
+  chunks.addSeries('organic', organic);
+  chunks.addSeries('timeOnPage', (bundle) => {
+    const deltas = bundle.events
+      .map((evt) => evt.timeDelta)
+      .filter((delta) => delta > 0);
+    if (deltas.length === 0) {
+      return undefined;
+    }
+    // get max delta and divide by 1000 to get seconds
+    return (deltas.reduce((a, b) => Math.max(a, b), -Infinity)) / 1000;
+  });
+  chunks.addFacet('type', (bundle) => bundle.hostType);
+
+  chunks.addFacet('userAgent', userAgent, 'some', 'none');
+
+  chunks.addFacet('url', facets.url, 'some', 'never');
+
+  chunks.addFacet('vitals', vitals);
+
+  chunks.addFacet('checkpoint', facets.checkpoint, 'every', 'none');
+  chunks.addFacet('navigate.source', (bundle) => Array.from(
+    bundle.events
+      .map(reclassifyConsent)
+      .filter((evt) => evt.checkpoint === 'navigate')
+      .filter(({ source }) => source) // filter out empty sources
+      .reduce((acc, { source }) => { acc.add(source); return acc; }, new Set()),
+  ));
+
+  chunks.addFacet('enter.source', (bundle) => Array.from(
+    bundle.events
+      .map(reclassifyConsent)
+      .filter((evt) => evt.checkpoint === 'enter')
+      .filter(({ source }) => source) // filter out empty sources
+      .reduce((acc, { source }) => { acc.add(source); return acc; }, new Set()),
+  ));
+  return chunks;
+};
+// eslint-disable-next-line max-len
+dataChunks.applyFilter = function applyFilter(bundles, filterSpec, skipFilterFn, existenceFilterFn, valuesExtractorFn, combinerExtractorFn) {
+  try {
+    const filterBy = Object.entries(filterSpec)
+      .filter(skipFilterFn)
+      .filter(([, desiredValues]) => desiredValues.length)
+      .filter(existenceFilterFn);
+    return bundles.filter((bundle) => filterBy.every(([attributeName, desiredValues]) => {
+      const actualValues = valuesExtractorFn(attributeName, bundle, this);
+
+      const combiners = {
+        // if some elements match, then return true (partial inclusion)
+        some: 'some',
+        // if some elements do not match, then return true (partial exclusion)
+        none: 'some',
+        // if every element matches, then return true (full inclusion)
+        every: 'every',
+        // if every element does not match, then return true (full exclusion)
+        never: 'every',
+      };
+
+      const negators = {
+        some: (value) => value,
+        every: (value) => value,
+        none: (value) => !value,
+        never: (value) => !value,
+      };
+      // this can be some, every, or none
+      const combinerprefence = combinerExtractorFn(attributeName, this);
+
+      const combiner = combiners[combinerprefence];
+      const negator = negators[combinerprefence];
+
+      return desiredValues[combiner]((value) => {
+        if (value instanceof RegExp) {
+          return negator(actualValues.some((actualValue) => value.test(actualValue)));
+        }
+        return negator(actualValues.includes(value));
+      });
+    }));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`Error while applying filter: ${error.message}`);
+    return [];
+  }
+};
 
 const loader = new DataLoader();
 loader.apiEndpoint = API_ENDPOINT;
@@ -311,6 +412,120 @@ export async function draw() {
   console.log(`full ui updated in ${new Date() - startTime}ms`);
 }
 
+function mockParams(filter) {
+  return {
+    getAll: (key) => {
+      const value = filter[key];
+      return Array.isArray(value) ? value : [value];
+    },
+
+    get: (key) => {
+      const value = filter[key];
+      return value;
+    },
+
+    entries: () => Object.entries(filter).flatMap(([key, value]) => {
+      if (Array.isArray(value)) {
+        return value.map((v) => [key, v]);
+      }
+      return [[key, value]];
+    }),
+
+    has: (key) => key in filter,
+  };
+}
+
+window.redraw = async function redraw(filters, updateUrl = true) {
+  const params = mockParams(filters);
+  elems.sidebar.querySelectorAll('input').forEach((e) => {
+    const [key, value] = e.id.split('=');
+    if (params.has(key)) {
+      const desired = params.getAll(key);
+      const match = desired.some((v) => {
+        if (v instanceof RegExp) {
+          return v.test(value);
+        }
+        return v === value;
+      });
+      if (match) {
+        e.checked = true;
+      } else {
+        e.checked = false;
+      }
+    }
+  });
+
+  const checkpoint = params.getAll('checkpoint');
+
+  const filterText = params.get('filter') || '';
+
+  const startTime = new Date();
+
+  updateDataFacets(filterText, params, checkpoint);
+
+  // set up filter from URL parameters
+  updateFilter(params, filterText);
+
+  // eslint-disable-next-line no-console
+  console.log(`filtered to ${dataChunks.filtered.length} bundles in ${new Date() - startTime}ms`);
+
+  await herochart.draw();
+
+  updateKeyMetrics();
+
+  if (updateUrl) {
+    const url = new URL(window.location.href.split('?')[0]);
+    const { searchParams } = new URL(window.location.href);
+    url.searchParams.set('domain', DOMAIN);
+    url.searchParams.set('filter', elems.filterInput.value);
+
+    const viewConfig = elems.viewSelect.value;
+    url.searchParams.set('view', viewConfig.value);
+    if (viewConfig.value === 'custom') {
+      url.searchParams.set('startDate', viewConfig.from);
+      url.searchParams.set('endDate', viewConfig.to);
+    }
+
+    if (searchParams.get('metrics')) url.searchParams.set('metrics', searchParams.get('metrics'));
+    const drilldown = new URL(window.location).searchParams.get('drilldown');
+    if (drilldown) url.searchParams.set('drilldown', drilldown);
+
+    Object.entries(dataChunks.filters).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((v) => {
+          if (!(v instanceof RegExp)) {
+            url.searchParams.append(key, v);
+          }
+        });
+      } else if (!(value instanceof RegExp)) {
+        url.searchParams.set(key, value);
+      }
+    });
+    url.searchParams.set('domainkey', searchParams.get('domainkey') || 'incognito');
+
+    // with the conversion spec in form of dictionary
+    // need to put it back in the url by expanding the dictionary as follows
+    // the key is appended to conversion. and there can be multiple values for the same key
+    // conversion.key=value1&conversion.key=value2
+
+    Object.entries(conversionSpec).forEach(([key, values]) => {
+      values.forEach((value) => {
+        url.searchParams.append(`conversion.${key}`, value);
+      });
+    });
+
+    // iterate over all existing URL parameters and keep those that are known facets
+    // and end with ~, so that we can keep the state of the facets
+    searchParams.forEach((value, key) => {
+      if (key.endsWith('~') && isKnownFacet(key)) {
+        url.searchParams.set(key, value);
+      }
+    });
+
+    window.history.replaceState({}, '', url);
+  }
+};
+
 async function loadData(config) {
   const scope = config.value;
   const params = new URL(window.location.href).searchParams;
@@ -439,7 +654,7 @@ const io = new IntersectionObserver((entries) => {
       loadData(elems.viewSelect.value).then(draw);
     }
 
-    elems.filterInput.addEventListener('input', () => {
+    elems.filterInput.addEventListener('change', () => {
       updateState();
       draw();
     });

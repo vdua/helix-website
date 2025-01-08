@@ -62,8 +62,8 @@ function groupBy(array, keyFn) {
   }, {});
 }
 
-function getClickData(data) {
-  const clickSource = data.facets['click.source'];
+function getCPData(data, event) {
+  const clickSource = data.facets[`${event}.source`];
   const result = clickSource.map((element) => {
     const groupedByUserAgent = groupBy(element.entries, (bundle) => {
       const ua = data.facetFns.userAgent(bundle);
@@ -91,10 +91,10 @@ function getClickData(data) {
   return result;
 }
 
-window.clickmap = function cm() {
-  dataChunks.addFacet('click.source', checkpointSource('click'));
+window.heatmap = function cm(event = 'click') {
+  dataChunks.addFacet(`${event}.source`, checkpointSource(event));
   dataChunks.filter = dataChunks.filters;
-  return getClickData(dataChunks);
+  return getCPData(dataChunks, event);
 };
 
 window.initializeDataChunks = function initializeDataChunks(data) {

@@ -1931,9 +1931,7 @@ body.guides-template .guides-back-btn span.icon {
     margin-bottom: var(--spacing-l);
   }
 
-  body.guides-template,
-  main.without-full-width-hero,
-  .default-content-wrapper,
+  body.guides-template main.without-full-width-hero .default-content-wrapper,
   body.skills-template,
   h1 {
     margin-top: var(--spacing-ml);
@@ -2184,5 +2182,47 @@ body.contact-template main .default-content-wrapper img {
   .block.breadcrumb {
     max-width: var(--header-container-width);
     padding: 0 var(--header-container-desktop-x-padding);
+  }
+}
+
+.faq-theme main .section + .section {
+  padding: 0;
+}
+
+@media (width >= 900px) {
+  body.faq-theme main {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(16px, 1fr) 300px auto minmax(16px, 1fr);
+  }
+
+  body.faq-theme main .breadcrumb-wrapper {
+    max-width: unset;
+    grid-column: 1 / span 4;
+  }
+
+  body.faq-theme main aside.side-navigation-wrapper {
+    grid-column-start: 2;
+    grid-row: 2 / span 10;
+    width: 300px;
+  }
+
+  body.faq-theme main div {
+    grid-column-start: 3;
+    max-width: 900px;
+  }
+
+  body.faq-theme main aside.side-navigation-wrapper.expand {
+    grid-column: 1 / span 4;
+    width: unset;
+  }
+
+  body.faq-theme main .section.content {
+    width: unset;
+    padding: unset;
+  }
+
+  body.faq-theme main .section:not(.content) {
+    padding-left: 32px;
   }
 }

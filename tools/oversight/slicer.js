@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-relative-packages
 import {
-  DataChunks, utils, series, facets, facetFns,
+  DataChunks, utils, series, facets,
 // eslint-disable-next-line import/no-unresolved
 } from '@adobe/rum-distiller';
 import DataLoader from './loader.js';
@@ -21,10 +21,6 @@ const {
   acquisitionSource,
   enterSource,
 } = facets;
-
-const {
-  checkpointSource,
-} = facetFns;
 
 const {
   pageViews, visits, bounces, lcp, cls, inp, engagement, ttfb, organic,
@@ -69,13 +65,14 @@ function getCPData(data, event) {
       const ua = data.facetFns.userAgent(bundle);
       return ua;
     });
+    const [selector, target] = element.value.split('%%');
     const sourceData = Object.entries(groupedByUserAgent).reduce((acc, [ua, entries]) => ({
       ...acc,
       [ua]: {
         count: entries.length,
         weight: entries.reduce((accWeight, bundle) => accWeight + bundle.weight, 0),
       },
-    }), { selector: element.value });
+    }), { selector, target });
     return sourceData;
   });
 
@@ -91,8 +88,19 @@ function getCPData(data, event) {
   return result;
 }
 
+const clickMap = (bundle) => Array.from(
+  bundle.events
+    .map(reclassifyConsent)
+    .filter((evt) => evt.checkpoint === 'click')
+    .filter(({ source }) => source) // filter out empty sources
+    .reduce((acc, { source, target }) => {
+      acc.add(`${source}%%${target}`);
+      return acc;
+    }, new Set()),
+);
+
 window.heatmap = function cm(event = 'click') {
-  dataChunks.addFacet(`${event}.source`, checkpointSource(event));
+  dataChunks.addFacet(`${event}.source`, clickMap);
   dataChunks.filter = dataChunks.filters;
   return getCPData(dataChunks, event);
 };

@@ -88,10 +88,10 @@ function getCPData(data, event) {
   return result;
 }
 
-const clickMap = (bundle) => Array.from(
+const clickMap = (event) => (bundle) => Array.from(
   bundle.events
     .map(reclassifyConsent)
-    .filter((evt) => evt.checkpoint === 'click')
+    .filter((evt) => evt.checkpoint === event)
     .filter(({ source }) => source) // filter out empty sources
     .reduce((acc, { source, target }) => {
       acc.add(`${source}%%${target}`);
@@ -100,7 +100,7 @@ const clickMap = (bundle) => Array.from(
 );
 
 window.heatmap = function cm(event = 'click') {
-  dataChunks.addFacet(`${event}.source`, clickMap);
+  dataChunks.addFacet(`${event}.source`, clickMap(event));
   dataChunks.filter = dataChunks.filters;
   return getCPData(dataChunks, event);
 };

@@ -3,6 +3,7 @@ import {
   createTag,
   loadFeedData,
   loadBlogData,
+  decorateGuideTemplateCodeBlock,
 } from '../../scripts/scripts.js';
 
 // logic for rendering the community feed
@@ -93,7 +94,14 @@ export async function renderBlog(block) {
     return;
   }
   const blogIndex = window.blogindex.data;
-  blogIndex.reverse();
+
+  // Sort blogs by publication date in descending order
+  blogIndex.sort((a, b) => {
+    const dateA = new Date(a.publicationDate);
+    const dateB = new Date(b.publicationDate);
+    return dateA - dateB;
+  });
+
   // Skip if block has favorite class
   if (block.classList.contains('favorite')) {
     return;
@@ -134,14 +142,14 @@ export async function renderBlog(block) {
     }
   }
 
-  // Get the latest blog
-  const latestBlog = blogIndex[0];
+  // Get the latest blog (newest by publication date)
+  const latestBlog = blogIndex[blogIndex.length - 1];
   if (!leftContainer.querySelector('.blog-item.latest')) {
     const latestBlogItem = createTag('div', { class: 'blog-item latest' });
     const latestBlogContent = await fetchBlogContent(latestBlog.path);
     if (latestBlogContent) {
-      // eslint-disable-next-line max-len
-      const truncatedContent = latestBlogContent.substring(0, Math.floor(latestBlogContent.length * 0.80));
+      const contentLength = latestBlogContent.length;
+      const truncatedContent = latestBlogContent.substring(0, Math.floor(contentLength * 0.80));
       latestBlogItem.innerHTML = truncatedContent;
     }
 
@@ -154,10 +162,13 @@ export async function renderBlog(block) {
     leftContainer.appendChild(latestBlogItem);
   }
 
-  // Get next 5 blogs in newest to oldest order
-  const startIndex = 0;
-  const endIndex = Math.min(startIndex + 5, blogIndex.length);
+  // Get next 5 blogs in newest to oldest order by publication date
+  const startIndex = Math.max(0, blogIndex.length - 6);
+  // Exclude the latest blog which is shown in left container
+  const endIndex = blogIndex.length - 1;
+  // Reverse to get newest to oldest
   const recentBlogs = blogIndex.slice(startIndex, endIndex).reverse();
+
   recentBlogs.forEach((page) => {
     const blogItem = createTag('div', { class: 'blog-item' });
 
@@ -207,12 +218,13 @@ export default async function decorate(block) {
       await renderFunction(block);
       block.dataset.rendered = 'true';
     } else {
-      const div = createTag('div', { class: 'feed-hidden' }, '');
-      block.append(div);
       document.addEventListener('dataset-ready', () => {
         if (checkDataLoaded() && !block.dataset.rendered) {
-          renderFunction(block);
-          block.dataset.rendered = 'true';
+          block.dataset.rendered = false;
+          renderFunction(block).then(() => {
+            decorateGuideTemplateCodeBlock();
+            block.dataset.rendered = 'true';
+          });
         }
       });
     }

@@ -19,7 +19,7 @@ export function sampleRUM(checkpoint, data) {
     window.hlx = window.hlx || {};
     sampleRUM.enhance = () => { };
     if (!window.hlx.rum) {
-      const param = new URLSearchParams(window.location.search).get('rum');
+      const param = 'off';
       const weight = (window.SAMPLE_PAGEVIEWS_AT_RATE === 'high' && 10)
         || (window.SAMPLE_PAGEVIEWS_AT_RATE === 'low' && 1000)
         || (param === 'on' && 1)
